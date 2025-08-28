@@ -1,61 +1,149 @@
+const express = require("express");
+const mongoose = require("mongoose");
+const jwt = require("jsonwebtoken");
+const app = express();
+
+app.use(express.json());
+
+mongoose.connect("mongodb://127.0.0.1:27017/studentmanagementdata")
+.then(() => console.log("MongoDB connected"))
+.catch(err => console.log("DB Connection Error:", err));
+const studentSchema = new mongoose.Schema({
+    name : String,
+    age : Number,
+    department : String,
+    rollNo : String
+});
+
+const Student = mongoose.model("Student", studentSchema);
+
+app.post('/insert', verifytoken, insertdata);
+
+app.post('/login', (req, res) => {
+    let {username, password} = req.body;
+    if(username == "admin" && password == "admin@123") {
+        let token = jwt.sign({username}, "SECRETKEY", {
+            expiresIn : '1h'
+        });
+        res.send(token);
+    }
+});
 
 
-
-
-
-
-
-let data = [];
-function getStudentByRollNo(req, res) {
-   console.log("[INFO] Entered into Get Student By Roll No");
-   const rollNo = req.body.rollNo;
-   const student = data.find(student => student.rollNo === rollNo);
-   if (student) {
-      console.log("[SUCCESS] Student Found");
-      res.status(200).send(student);
-   } else {
-      console.log("[ERROR] Student Not Found");
-      res.status(404).send("Student Not Found");
-   }
+function verifytoken(req, res, next) {
+    let token = req.body.token;
+        if(!token) return res.send("No token provided");
+        jwt.verify(token, "SECRETKEY", (err, decoded) => {
+            if(err) {
+                console.log(err);
+                return res.send("Invalid token");
+            }
+            console.log(decoded);
+            next();
+        });
 }
 
-function getAllStudents(req, res) {
-   console.log("[INFO] Entered into Get All Students");
-   res.send(data);
+async function insertdata(req, res) {
+    const { name, age, department, rollNo } = req.body;
+    const newStudent = new Student({ name, age, department, rollNo });
+    try {
+        await newStudent.save();
+        res.status(201).send("Student inserted");
+    } catch (error) {
+        res.status(400).send("Error inserting student");
+    } 
 }
 
-function insertdata(req, res) {
-   console.log("[INFO] Entered into Insert Data");
-   let isDuplicate = checkIfDataIsPresent(req.body.rollNo);
-   if (!isDuplicate) {
-      console.log("[INFO] No Duplicate Found");
-      data.push(req.body);
-      console.log("[SUCCESS] Data Inserted Successfully");
-      res.send('Data Inserted');
-   }
-   else {
-      console.log("[INFO] Duplicate Record Found");
-      res.send("Record Already Exists");
-   }
-}
-function checkIfDataIsPresent(rollNo) {
-   for (let i of data) {
-      if (i.rollNo === rollNo) {
-         return true;
-      }
-   }
-   return false;
-}
+app.get('/getAllStudents', async (req, res) => {
+    try {
+        const data = await Student.find();
+        res.send(data);
+    }
+    catch (error) {
+        res.status(500).send("Error fetching students");
+    }
+ });
 
-function deleteStudent(req, res) {
-   let rollNo = req.body.rollNo;
-   let index = data.findIndex(s => s.rollNo === rollNo);
-   if (index !== -1) {
-      data.splice(index, 1);
-      res.send("Student Deleted");
-   } else {
-      res.status(404).send("Student Not Found");
-   }
-}
+ app.get('/getStudentByRollNo', async (req, res) => {
+    try {
+        const { rollNo } = req.body;
+        const data = await Student.findOne({ rollNo });
+        if (data) {
+            res.send(data);
+        } else {
+            res.status(404).send("Student not found");
+        }
+    }
+    catch (error) {
+        res.status(500).send("Error fetching students");
+    }
+ });
 
-module.exports = { getStudentByRollNo, insertdata, deleteStudent, getAllStudents };
+ app.get('/getStudentbyParams/:rollNo', async (req, res) => {
+    try {
+        const { rollNo } = req.params;
+        const data = await Student.findOne({ rollNo });
+        if (data) {
+            res.send(data);
+        } else {
+            res.status(404).send("Student not found");
+        }
+    }
+    catch (error) {
+        res.status(500).send("Error fetching students");
+    }
+ });
+
+  app.get('/getStudentbyQuery', async (req, res) => {
+    try {
+        const { rollNo } = req.query;
+        const data = await Student.findOne({ rollNo });
+        if (data) {
+            res.send(data);
+        } else {
+            res.status(404).send("Student not found");
+        }
+    }
+    catch (error) {
+        res.status(500).send("Error fetching students");
+    }
+ });
+
+ app.delete('/deleteStudentByRollNO', async (req, res) => {
+    const {rollNo} = req.body;
+    try {
+        const deletedStudent = await Student.findOneAndDelete({rollNo})
+        console.log(deletedStudent, rollNo);
+
+        if(deletedStudent) {
+            res.send("Student deleted");
+        } else {
+            res.status(404).send("Student not found");
+        }
+    }
+    catch(err) {
+        res.send("Error in deleting student");
+    }
+ });
+
+ app.put('/updateStudent', async (req, res) => {
+     const { rollNo, name, age, department } = req.body;
+     try {
+         const updatedStudent = await Student.findOneAndUpdate(
+             { rollNo },
+             { name, age, department },
+             { new: true }
+         );
+         if (updatedStudent) {
+             res.send("Student updated");
+         } else {
+             res.status(404).send("Student not found");
+         }
+     } catch (error) {
+         res.status(500).send("Error updating student");
+     }
+ });
+
+
+
+app.listen(3000);
